@@ -1,0 +1,1428 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 
+      NEW FIX: This Content Security Policy (CSP) tag is required to allow the page
+      to connect to the Google Gemini API and load the 3D model scripts from CDNs.
+    -->
+    <meta http-equiv="Content-Security-Policy" 
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self' data: blob: https://generativelanguage.googleapis.com; font-src 'self' data:;">
+
+    <title>5D Fibre Concrete Floor Designer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #header {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 800px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            text-align: center;
+        }
+        #header h1 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        #header p {
+            margin: 0;
+            color: #555;
+            font-size: 14px;
+        }
+        /* Style for the dimension labels */
+        .dimension-label, .load-label {
+            color: #333;
+            font-size: 14px;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            text-shadow: 0 0 2px #fff;
+        }
+        .load-label {
+            font-size: 12px;
+            color: #c62828; /* Red for emphasis */
+            font-weight: bold;
+        }
+        
+        /* --- AI Controls --- */
+        #controls-container {
+            position: absolute;
+            top: 110px; /* Below header */
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            cursor: move; /* Add move cursor */
+        }
+        .ai-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+        }
+        .ai-button:hover {
+            background-color: #0056b3;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        /* New style for the API key warning modal */
+        #api-key-modal-content {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            white-space: normal;
+            line-height: 1.6;
+        }
+        #api-key-modal-content h2 {
+            color: #c62828; /* Red */
+            margin-top: 0;
+        }
+        #api-key-modal-content code {
+            background-color: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.7);
+            z-index: 2000;
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* --- Spec Box --- */
+        #spec-box {
+            position: absolute;
+            bottom: 70px; /* Moved up to make space for chat button */
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 100;
+            width: 240px; 
+            max-width: 240px;
+            border: 1px solid rgba(0,0,0,0.1);
+            cursor: move; /* Add move cursor */
+        }
+        #spec-box strong {
+            font-size: 14px;
+            display: block;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            color: #000;
+        }
+        #spec-inputs {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px; /* Add gap for inputs */
+        }
+        #spec-box .spec-item {
+            display: flex;
+            flex-direction: column;
+            font-size: 11px;
+        }
+        #spec-box .spec-item label {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 2px;
+        }
+        #spec-box .spec-item input {
+            font-size: 12px;
+            padding: 4px 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box; /* Important */
+        }
+        #spec-box .calculated-item {
+            font-size: 12px;
+            margin-top: 5px;
+            padding-left: 0;
+            position: relative;
+        }
+        #spec-box .calculated-item::before {
+            content: none; /* Remove bullet */
+        }
+        
+        #cross-section-controls {
+            position: absolute;
+            top: 110px; /* Moved down to avoid header */
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 100;
+            font-size: 14px;
+        }
+        #cross-section-controls label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        #cross-section-controls input[type="range"] {
+            width: 150px;
+        }
+        #fiber-view-container {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            z-index: 100;
+            font-size: 14px;
+            text-align: center;
+        }
+        #fiber-view {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            border: 1px solid #ccc;
+            margin-top: 5px;
+            cursor: grab;
+        }
+        
+        /* --- Chat Widget --- */
+        #chat-toggle-button {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 50px;
+            height: 50px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 102;
+            transition: all 0.3s ease;
+        }
+        #chat-toggle-button:hover {
+            transform: scale(1.1);
+            background-color: #0056b3;
+        }
+        #chat-widget {
+            position: absolute;
+            bottom: 70px;
+            left: 10px;
+            width: 350px;
+            height: 450px;
+            background: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            z-index: 101;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+        #chat-header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+        }
+        #chat-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .chat-message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            line-height: 1.4;
+        }
+        .user-message {
+            background-color: #e1e1e1;
+            color: #333;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .ai-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-loader {
+            align-self: flex-start;
+        }
+        .chat-loader .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #bbb;
+            display: inline-block;
+            margin: 0 2px;
+            animation: chat-bounce 1.4s infinite both;
+        }
+        .chat-loader .dot:nth-child(1) { animation-delay: -0.32s; }
+        .chat-loader .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes chat-bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        
+        #chat-input-container {
+            display: flex;
+            border-top: 1px solid #ddd;
+            padding: 10px;
+            background-color: #fff;
+        }
+        #chat-input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            padding: 10px 15px;
+            font-size: 14px;
+            outline: none;
+        }
+        #chat-input:focus {
+            border-color: #007bff;
+        }
+        #chat-send {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #chat-send:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <h1>5D Fibre Concrete Floor Designer</h1>
+        <p>
+            <strong>Controls:</strong> <strong>Click & Drag</strong> to Rotate | <strong>Right-Click & Drag</strong> to Pan | <strong>Scroll</strong> to Zoom
+        </p>
+    </div>
+    
+    <div id="controls-container">
+        <button id="report-button" class="ai-button">Get Report</button>
+        <button id="cost-button" class="ai-button">Get Cost Estimate</button>
+        <button id="schedule-button" class="ai-button">Get Schedule</button>
+        <button id="insights-button" class="ai-button">Get Insights</button>
+        <button id="drawings-button" class="ai-button">Get Drawings</button>
+    </div>
+
+    <div id="cross-section-controls">
+        <label>
+            <input type="checkbox" id="section-toggle"> Enable Cross-Section
+        </label>
+        <div id="section-slider-container" style="display: none;">
+             <label for="section-slider">Position:</label>
+             <input type="range" id="section-slider" min="-25" max="25" value="0" step="0.1">
+             <div>
+                <label><input type="radio" name="section-axis" value="x" checked> X-Axis</label>
+                <label><input type="radio" name="section-axis" value="z"> Z-Axis</label>
+             </div>
+        </div>
+    </div>
+
+    <div id="fiber-view-container">
+        <strong>Interactive Fiber Model</strong>
+        <div id="fiber-view"></div>
+    </div>
+
+
+    <div id="spec-box">
+        <strong>Project Specifications</strong>
+        <div id="spec-inputs">
+            <div class="spec-item">
+                <label for="spec-width">Width (m):</label>
+                <input type="number" id="spec-width" value="50.0" step="0.1">
+            </div>
+            <div class="spec-item">
+                <label for="spec-depth">Depth (m):</label>
+                <input type="number" id="spec-depth" value="50.0" step="0.1">
+            </div>
+            <div class="spec-item">
+                <label for="spec-thickness">Thickness (mm):</label>
+                <input type="number" id="spec-thickness" value="200">
+            </div>
+            <div class="spec-item">
+                <label for="spec-concrete">Concrete Class:</label>
+                <input type="text" id="spec-concrete" value="C30/37">
+            </div>
+            <div class="spec-item">
+                <label for="spec-fibers">Steel Fibers (kg/m³):</label>
+                <input type="number" id="spec-fibers" value="45">
+            </div>
+            <div class="spec-item">
+                <label for="spec-reinf">Reinforcement:</label>
+                <input type="text" id="spec-reinf" value="A142 Mesh at Joints">
+            </div>
+            <div class="spec-item">
+                <label for="spec-ground-k">Ground Stiffness (MN/m³):</label>
+                <input type="number" id="spec-ground-k" value="20">
+            </div>
+            <div class="spec-item">
+                <label for="spec-beams">Perimeter Beams:</label>
+                <input type="text" id="spec-beams" value="0.5m width (k=1000 MN/m³)">
+            </div>
+            <div class="spec-item">
+                <label for="spec-udl">UDL (kN/m²):</label>
+                <input type="number" id="spec-udl" value="25">
+            </div>
+            <div class="spec-item">
+                <label for="spec-racking">Racking Point Load (kN):</label>
+                <input type="number" id="spec-racking" value="50">
+            </div>
+            <div class="spec-item">
+                <label for="spec-forklift">Forklift Wheel Load (kN):</label>
+                <input type="number" id="spec-forklift" value="40">
+            </div>
+            
+            <div class="calculated-item" style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 5px;">
+                Total Concrete: <strong id="calc-concrete">~1250 Tonnes</strong>
+            </div>
+            <div class="calculated-item">
+                Total Steel: <strong id="calc-steel">~25.3 Tonnes</strong>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Chat Widget -->
+    <button id="chat-toggle-button">💬</button>
+    <div id="chat-widget">
+        <div id="chat-header">Project AI Assistant</div>
+        <div id="chat-messages">
+            <div class="chat-message ai-message">
+                Hello! How can I help you with this project today?
+            </div>
+        </div>
+        <div id="chat-input-container">
+            <input type="text" id="chat-input" placeholder="Ask about the project...">
+            <button id="chat-send">➤</button>
+        </div>
+    </div>
+    
+    <!-- Modals for AI Features -->
+    <div id="report-modal-overlay" class="modal-overlay">
+        <div class="modal-content" id="report-modal-content"></div>
+    </div>
+    <div id="cost-modal-overlay" class="modal-overlay">
+        <div class="modal-content" id="cost-modal-content"></div>
+    </div>
+    <div id="schedule-modal-overlay" class="modal-overlay">
+        <div class="modal-content" id="schedule-modal-content"></div>
+    </div>
+    <div id="insights-modal-overlay" class_3="modal-overlay">
+        <div class="modal-content" id="insights-modal-content"></div>
+    </div>
+    <div id="drawings-modal-overlay" class="modal-overlay">
+        <div class="modal-content" id="drawings-modal-content"></div>
+    </div>
+    <div id="gemini-loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- NEW: Modal for API Key Warning -->
+    <div id="api-key-modal-overlay" class="modal-overlay">
+        <div class="modal-content" id="api-key-modal-content">
+            <h2>Configuration Required</h2>
+            <p>This tool's AI features are not yet enabled. To activate them, you must add a Google Gemini API key.</p>
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Go to <strong>Google AI Studio</strong> (ai.google.dev) and generate a free API key.</li>
+                <li>Open this <code>index.html</code> file in a text editor (like VS Code).</li>
+                <li>Find the <code>&lt;script&gt;</code> tag at the very bottom of the file.</li>
+                <li>Locate the line: <code>const apiKey = "PASTE_YOUR_GEMINI_API_KEY_HERE";</code></li>
+                <li>Replace the placeholder text with your actual API key.</li>
+                <li>Save the file and re-upload it to your web host.</li>
+            </ol>
+            <p style="text-align: center; margin-top: 20px;">
+                <button id="api-key-modal-close" class="ai-button">I Understand</button>
+            </p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Use a self-executing anonymous function to avoid polluting the global namespace
+        (function() {
+            let scene, camera, renderer, controls, labelRenderer;
+            let clippingPlane;
+            let clippedMaterials = [];
+
+            let fiberScene, fiberCamera, fiberRenderer, fiberControls;
+
+            // --- NEW: Helper function to read specs from inputs ---
+            function getCurrentSpecsAsText() {
+                const width = document.getElementById('spec-width').value;
+                const depth = document.getElementById('spec-depth').value;
+                const thickness = document.getElementById('spec-thickness').value;
+                const concrete = document.getElementById('spec-concrete').value;
+                const fibers = document.getElementById('spec-fibers').value;
+                const reinf = document.getElementById('spec-reinf').value;
+                const groundK = document.getElementById('spec-ground-k').value;
+                const beams = document.getElementById('spec-beams').value;
+                const udl = document.getElementById('spec-udl').value;
+                const racking = document.getElementById('spec-racking').value;
+                const forklift = document.getElementById('spec-forklift').value;
+                const calcConcrete = document.getElementById('calc-concrete').innerText;
+                const calcSteel = document.getElementById('calc-steel').innerText;
+                
+                return `
+- Dimensions: ${width}m x ${depth}m
+- Thickness: ${thickness}mm
+- Concrete Class: ${concrete}
+- Steel Fibers: ${fibers} kg/m³
+- Reinforcement: ${reinf}
+- Ground Stiffness (k): ${groundK} MN/m³
+- Perimeter Beams: ${beams}
+- UDL: ${udl} kN/m²
+- Racking Point Load: ${racking} kN
+- Forklift Wheel Load: ${forklift} kN
+- Total Concrete: ${calcConcrete}
+- Total Steel: ${calcSteel}
+                `.trim();
+            }
+
+            // --- NEW: Helper function to update calculated specs ---
+            function updateCalculatedSpecs() {
+                try {
+                    const width = parseFloat(document.getElementById('spec-width').value) || 0;
+                    const depth = parseFloat(document.getElementById('spec-depth').value) || 0;
+                    const thickness = parseFloat(document.getElementById('spec-thickness').value) / 1000 || 0; // convert mm to m
+                    const fibers = parseFloat(document.getElementById('spec-fibers').value) || 0;
+                    
+                    const volume = width * depth * thickness; // m³
+                    
+                    // Concrete density approx 2.4 tonnes/m³ (C30/37)
+                    const concreteWeight = volume * 2.4; 
+                    
+                    // Steel weight
+                    const steelWeight = (volume * fibers) / 1000; // kg -> tonnes
+                    
+                    document.getElementById('calc-concrete').innerText = `~${concreteWeight.toFixed(0)} Tonnes`;
+                    document.getElementById('calc-steel').innerText = `~${steelWeight.toFixed(1)} Tonnes`;
+
+                } catch (e) {
+                    console.error("Error calculating specs:", e);
+                    document.getElementById('calc-concrete').innerText = "Error";
+                    document.getElementById('calc-steel').innerText = "Error";
+                }
+            }
+
+            // --- NEW: Attach listeners to update calculations ---
+            function setupSpecListeners() {
+                const inputs = ['spec-width', 'spec-depth', 'spec-thickness', 'spec-fibers'];
+                inputs.forEach(id => {
+                    document.getElementById(id).addEventListener('input', updateCalculatedSpecs);
+                });
+            }
+
+
+            function init() {
+                // --- SCENE SETUP ---
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0xf0f0f0);
+
+                // --- CAMERA SETUP ---
+                camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+                camera.position.set(40, 40, 40); // Set initial camera position
+                camera.lookAt(0, 0, 0);
+
+                // --- RENDERER SETUP ---
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.localClippingEnabled = false; // Disabled by default
+                document.body.appendChild(renderer.domElement);
+                
+                // --- CLIPPING PLANE ---
+                clippingPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
+                
+                // --- LABEL RENDERER SETUP ---
+                const labelRendererScript = document.createElement('script');
+                labelRendererScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js';
+                document.body.appendChild(labelRendererScript);
+
+                // --- LIGHTING ---
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(50, 50, 50);
+                scene.add(directionalLight);
+
+                // --- FLOOR SLAB ---
+                const slabWidth = 50;
+                const slabDepth = 50;
+                const slabHeight = 2; // Exaggerated thickness for better visibility
+                const halfWidth = slabWidth / 2;
+                const halfDepth = slabDepth / 2;
+                
+                const slabGeometry = new THREE.BoxGeometry(slabWidth, slabHeight, slabDepth);
+                const slabMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xcccccc,
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(slabMaterial);
+                const slab = new THREE.Mesh(slabGeometry, slabMaterial);
+                slab.position.y = -slabHeight / 2;
+                scene.add(slab);
+
+                // --- PERIMETER BEAMS ---
+                const beamWidth = 0.5;
+                const beamLengthX = slabWidth + (beamWidth * 2); // 51
+                const beamLengthZ = slabDepth; // 50
+                const beamHeight = slabHeight; // Same height as slab for vis
+                
+                const beamMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xaaaaaa, // Slightly darker than slab
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(beamMaterial);
+
+                // Beam 1 (Positive Z)
+                const beamGeomZ1 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
+                const beamZ1 = new THREE.Mesh(beamGeomZ1, beamMaterial);
+                beamZ1.position.set(0, -beamHeight / 2, halfDepth + beamWidth / 2); // (0, -1, 25.25)
+                scene.add(beamZ1);
+                
+                // Beam 2 (Negative Z)
+                const beamGeomZ2 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
+                const beamZ2 = new THREE.Mesh(beamGeomZ2, beamMaterial);
+                beamZ2.position.set(0, -beamHeight / 2, -halfDepth - beamWidth / 2); // (0, -1, -25.25)
+                scene.add(beamZ2);
+                
+                // Beam 3 (Positive X)
+                const beamGeomX1 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
+                const beamX1 = new THREE.Mesh(beamGeomX1, beamMaterial);
+                beamX1.position.set(halfWidth + beamWidth / 2, -beamHeight / 2, 0); // (25.25, -1, 0)
+                scene.add(beamX1);
+
+                // Beam 4 (Negative X)
+                const beamGeomX2 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
+                const beamX2 = new THREE.Mesh(beamGeomX2, beamMaterial);
+                beamX2.position.set(-halfWidth - beamWidth / 2, -beamHeight / 2, 0); // (-25.25, -1, 0)
+                scene.add(beamX2);
+
+
+                // --- JOINT LINES ---
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x555555 });
+                const constructionLineMaterial = new THREE.LineBasicMaterial({ color: 0x222222 }); 
+
+                const topY = 0.01;
+
+                const gridSize = 6;
+                for (let i = -halfWidth + gridSize; i < halfWidth; i += gridSize) {
+                    const points = [new THREE.Vector3(i, topY, -halfDepth), new THREE.Vector3(i, topY, halfDepth)];
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    scene.add(new THREE.Line(geometry, lineMaterial));
+                }
+                 for (let i = -halfDepth + gridSize; i < halfDepth; i += gridSize) {
+                    const points = [new THREE.Vector3(-halfWidth, topY, i), new THREE.Vector3(halfWidth, topY, i)];
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    scene.add(new THREE.Line(geometry, lineMaterial));
+                }
+
+                const constructionPoints = [new THREE.Vector3(0, topY, -halfDepth), new THREE.Vector3(0, topY, halfDepth)];
+                const constructionGeometry = new THREE.BufferGeometry().setFromPoints(constructionPoints);
+                scene.add(new THREE.Line(constructionGeometry, constructionLineMaterial));
+
+                // --- CONTROLS and other elements (Load scripts then initialize) ---
+                const controlsScript = document.createElement('script');
+                controlsScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+                document.body.appendChild(controlsScript);
+
+                labelRendererScript.onload = controlsScript.onload = () => {
+                    if (window.THREE && window.THREE.OrbitControls && window.THREE.CSS2DRenderer) {
+                        if (controls) return;
+
+                        labelRenderer = new THREE.CSS2DRenderer();
+                        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+                        labelRenderer.domElement.style.position = 'absolute';
+                        labelRenderer.domElement.style.top = '0px';
+                        labelRenderer.domElement.style.pointerEvents = 'none';
+                        document.body.appendChild(labelRenderer.domElement);
+
+                        controls = new THREE.OrbitControls(camera, renderer.domElement);
+                        controls.enableDamping = true;
+                        controls.minDistance = 10;
+                        controls.maxDistance = 200;
+                        controls.maxPolarAngle = Math.PI / 2; 
+
+                        addDimensions();
+                        addLoadVisuals(); 
+                        addReinforcementVisuals(); 
+                        setupFiberView(); // Initialize the fiber model view
+
+                        animate();
+                    }
+                };
+                
+                window.addEventListener('resize', onWindowResize, false);
+                setupClippingControls();
+                setupChatFeature(); // Initialize the new chat feature
+                setupGeminiFeatures(); // Initialize AI buttons
+                setupDraggableControls(); // Add this new function call
+                setupDraggableSpecBox(); // <-- ADDED THIS
+                updateCalculatedSpecs(); // Calculate totals on load
+                setupSpecListeners(); // Add listeners for live calculation
+                
+                checkApiKey(); // <-- ADDED THIS
+            }
+            
+            // --- NEW: Function to check for API Key ---
+            function checkApiKey() {
+                // This is the variable you need to replace
+                
+                // ===============================================
+                //       ▼▼▼ PASTE YOUR API KEY HERE (1 of 2) ▼▼▼
+                // ===============================================
+                const apiKey = "AIzaSyCv6TgTiTuwvHZPPg6YT0XS8JiElMkPaeE"; 
+                
+                // CRITICAL SECURITY WARNING
+                // This key is visible to anyone who views this page.
+                // Go to your Google Cloud dashboard and restrict this key to
+                // "HTTP referrers" and add your domain (e.g., "your-site.netlify.app")
+                // to prevent others from stealing and using your key.
+
+                const overlay = document.getElementById('api-key-modal-overlay');
+                if (apiKey.startsWith("PASTE_") || apiKey === "") {
+                    overlay.style.display = 'flex';
+                }
+                
+                document.getElementById('api-key-modal-close').addEventListener('click', () => {
+                    overlay.style.display = 'none';
+                });
+            }
+
+            function setupFiberView() {
+                const container = document.getElementById('fiber-view');
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+
+                // --- Scene ---
+                fiberScene = new THREE.Scene();
+                fiberScene.background = new THREE.Color(0xddeeff);
+
+                // --- Camera ---
+                fiberCamera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+                fiberCamera.position.set(3, 3, 3);
+                fiberCamera.lookAt(0,0,0);
+
+                // --- Renderer ---
+                fiberRenderer = new THREE.WebGLRenderer({ antialias: true });
+                fiberRenderer.setSize(width, height);
+                fiberRenderer.setPixelRatio(window.devicePixelRatio);
+                container.appendChild(fiberRenderer.domElement);
+
+                // --- Controls ---
+                fiberControls = new THREE.OrbitControls(fiberCamera, fiberRenderer.domElement);
+                fiberControls.enableDamping = true;
+                fiberControls.enableZoom = false;
+
+                // --- Lighting ---
+                const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+                fiberScene.add(ambLight);
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(5, 5, 5);
+                fiberScene.add(dirLight);
+
+                // --- Concrete Matrix Cube ---
+                const matrixGeom = new THREE.BoxGeometry(2, 2, 2);
+                const matrixMat = new THREE.MeshPhongMaterial({
+                    color: 0xcccccc,
+                    transparent: true,
+                    opacity: 0.2
+                });
+                const matrixCube = new THREE.Mesh(matrixGeom, matrixMat);
+                fiberScene.add(matrixCube);
+                
+                // --- Steel Fibers ---
+                const fiberGeom = new THREE.CylinderGeometry(0.02, 0.02, 1, 8);
+                const fiberMat = new THREE.MeshPhongMaterial({ color: 0x666677 });
+                
+                for (let i = 0; i < 50; i++) {
+                    const fiber = new THREE.Mesh(fiberGeom, fiberMat);
+                    fiber.position.set(
+                        (Math.random() - 0.5) * 1.8,
+                        (Math.random() - 0.5) * 1.8,
+                        (Math.random() - 0.5) * 1.8
+                    );
+                    fiber.rotation.set(
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI,
+                        Math.random() * Math.PI
+                    );
+                    fiberScene.add(fiber);
+                }
+            }
+
+
+            function setupClippingControls() {
+                const toggle = document.getElementById('section-toggle');
+                const sliderContainer = document.getElementById('section-slider-container');
+                const slider = document.getElementById('section-slider');
+                const axisRadios = document.querySelectorAll('input[name="section-axis"]');
+
+                toggle.addEventListener('change', (e) => {
+                    renderer.localClippingEnabled = e.target.checked;
+                    sliderContainer.style.display = e.target.checked ? 'block' : 'none';
+                });
+
+                slider.addEventListener('input', (e) => {
+                    clippingPlane.constant = parseFloat(e.target.value);
+                });
+
+                axisRadios.forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        if (e.target.checked) {
+                            const axis = e.target.value;
+                            if (axis === 'x') {
+                                clippingPlane.normal.set(-1, 0, 0);
+                            } else { // 'z'
+                                clippingPlane.normal.set(0, 0, -1);
+                            }
+                            // Reset slider position when changing axis
+                            slider.value = 0;
+                            clippingPlane.constant = 0;
+                        }
+                    });
+                });
+            }
+            
+            function setupChatFeature() {
+                const toggleButton = document.getElementById('chat-toggle-button');
+                const chatWidget = document.getElementById('chat-widget');
+                const messagesContainer = document.getElementById('chat-messages');
+                const input = document.getElementById('chat-input');
+                const sendButton = document.getElementById('chat-send');
+                let chatOpen = false;
+
+                toggleButton.addEventListener('click', () => {
+                    chatOpen = !chatOpen;
+                    chatWidget.style.display = chatOpen ? 'flex' : 'none';
+                    toggleButton.textContent = chatOpen ? '✕' : '💬';
+                });
+
+                sendButton.addEventListener('click', handleSendMessage);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        handleSendMessage();
+                    }
+                });
+
+                async function handleSendMessage() {
+                    const messageText = input.value.trim();
+                    if (messageText === '') return;
+
+                    addMessage(messageText, 'user');
+                    input.value = '';
+
+                    showLoadingIndicator();
+
+                    // Dynamically build the system prompt with current specs
+                    const currentSpecList = getCurrentSpecsAsText();
+                    const dynamicChatSystemPrompt = `You are a helpful AI assistant for a 3D building project viewer. Your job is to answer questions based *only* on the project specifications provided. Be concise and helpful. The project specs are:
+---
+${currentSpecList}
+---
+If the user asks a question you cannot answer from this data, politely say you don't have that information.`;
+
+                    try {
+                        const aiResponse = await callGemini(messageText, dynamicChatSystemPrompt);
+                        removeLoadingIndicator();
+                        addMessage(aiResponse, 'ai');
+                    } catch (error) {
+                        removeLoadingIndicator();
+                        addMessage('Sorry, I had trouble connecting. Please try again.', 'ai');
+                    }
+                }
+
+                function addMessage(text, sender) {
+                    const messageElement = document.createElement('div');
+                    messageElement.className = `chat-message ${sender}-message`;
+                    messageElement.textContent = text;
+                    messagesContainer.appendChild(messageElement);
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+
+                function showLoadingIndicator() {
+                    const loaderElement = document.createElement('div');
+                    loaderElement.className = 'chat-loader';
+                    loaderElement.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+                    messagesContainer.appendChild(loaderElement);
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+                
+                function removeLoadingIndicator() {
+                    const loader = messagesContainer.querySelector('.chat-loader');
+                    if (loader) {
+                        messagesContainer.removeChild(loader);
+                    }
+                }
+            }
+            
+            // --- NEW: Function to make spec box draggable ---
+            function setupDraggableSpecBox() {
+                const specBox = document.getElementById('spec-box');
+                let isDragging = false;
+                let offsetX, offsetY;
+
+                specBox.addEventListener('mousedown', (e) => {
+                    // Only start drag if not clicking on an input/label
+                    if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'label') return;
+                    
+                    isDragging = true;
+                    offsetX = e.clientX - specBox.getBoundingClientRect().left;
+                    offsetY = e.clientY - specBox.getBoundingClientRect().top;
+                    
+                    specBox.style.opacity = '0.8';
+                    document.body.style.userSelect = 'none'; // Prevent text selection
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+
+                function onMouseMove(e) {
+                    if (!isDragging) return;
+                    
+                    let newLeft = e.clientX - offsetX;
+                    let newTop = e.clientY - offsetY;
+
+                    // Constrain to window bounds
+                    const maxLeft = window.innerWidth - specBox.offsetWidth - 10;
+                    const maxTop = window.innerHeight - specBox.offsetHeight - 10;
+                    
+                    newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+                    newTop = Math.max(10, Math.min(newTop, maxTop));
+
+                    specBox.style.left = `${newLeft}px`;
+                    specBox.style.top = `${newTop}px`;
+                    specBox.style.bottom = 'auto'; // IMPORTANT: Override bottom positioning
+                }
+
+                function onMouseUp() {
+                    isDragging = false;
+                    specBox.style.opacity = '0.85'; // Return to normal opacity
+                    document.body.style.userSelect = ''; // Re-enable text selection
+                    
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+            }
+            
+            // --- Function to make controls draggable ---
+            function setupDraggableControls() {
+                const controlsContainer = document.getElementById('controls-container');
+                let isDragging = false;
+                let offsetX, offsetY;
+
+                controlsContainer.addEventListener('mousedown', (e) => {
+                    // Only start drag if not clicking on a button itself
+                    if (e.target.classList.contains('ai-button')) return;
+                    
+                    isDragging = true;
+                    offsetX = e.clientX - controlsContainer.getBoundingClientRect().left;
+                    offsetY = e.clientY - controlsContainer.getBoundingClientRect().top;
+                    
+                    controlsContainer.style.opacity = '0.8';
+                    document.body.style.userSelect = 'none'; // Prevent text selection
+                    
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+
+                function onMouseMove(e) {
+                    if (!isDragging) return;
+                    
+                    let newLeft = e.clientX - offsetX;
+                    let newTop = e.clientY - offsetY;
+
+                    // Constrain to window bounds
+                    const maxLeft = window.innerWidth - controlsContainer.offsetWidth - 10;
+                    const maxTop = window.innerHeight - controlsContainer.offsetHeight - 10;
+                    
+                    newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+                    newTop = Math.max(10, Math.min(newTop, maxTop));
+
+                    controlsContainer.style.left = `${newLeft}px`;
+                    controlsContainer.style.top = `${newTop}px`;
+                }
+
+                function onMouseUp() {
+                    isDragging = false;
+                    controlsContainer.style.opacity = '0.85'; // Return to normal opacity
+                    document.body.style.userSelect = ''; // Re-enable text selection
+                    
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+            }
+            
+            // --- NEW: Re-added setupGeminiFeatures ---
+            function setupGeminiFeatures() {
+                const loadingOverlay = document.getElementById('gemini-loading-overlay');
+                const startDate = new Date().toISOString().split('T')[0]; // For schedule
+
+                function showLoading() { loadingOverlay.style.display = 'flex'; }
+                function hideLoading() { loadingOverlay.style.display = 'none'; }
+
+                function setupModal(buttonId, overlayId, contentId, systemPrompt, userQueryFn) {
+                    const button = document.getElementById(buttonId);
+                    const overlay = document.getElementById(overlayId);
+                    const content = document.getElementById(contentId);
+
+                    button.addEventListener('click', async () => {
+                        content.innerHTML = ''; // Clear previous content
+                        overlay.style.display = 'flex';
+                        showLoading();
+                        
+                        try {
+                            const userQuery = userQueryFn(); // Get dynamic specs
+                            const result = await callGemini(userQuery, systemPrompt);
+                            // Basic markdown cleanup. Replace ```markdown and ```
+                            let formattedResult = result.replace(/```markdown\n/g, '').replace(/```/g, '');
+                            
+                            // Simple table formatting
+                            formattedResult = formattedResult
+                                .replace(/\|(.*?)\|/g, (match, p1) => `<td>${p1.trim()}</td>`) // cells
+                                .replace(/<td>(.*?)<\/td>\n/g, '</tr>\n<tr>') // rows
+                                .replace(/<\/tr>\n<tr>(.*?)(<td>---.*?<\/td>)(.*?)<\/tr>/g, '</tr></thead><tbody><tr>'); // header separator
+
+                            if (formattedResult.includes('<td>')) {
+                                formattedResult = `<table class="report-table">${formattedResult.replace(/<\/tr>$/, '</tbody></table>')}`;
+                                formattedResult = formattedResult.replace('<table>', '<table><thead><tr>');
+                            }
+                            
+                            content.innerHTML = formattedResult;
+                        } catch (error) {
+                            console.error(`Error in ${buttonId}:`, error);
+                            content.innerText = 'Error: Could not retrieve data. Please try again.';
+                        } finally {
+                            hideLoading();
+                        }
+                    });
+
+                    overlay.addEventListener('click', (e) => {
+                        if (e.target === overlay) {
+                            overlay.style.display = 'none';
+                        }
+                    });
+                }
+                
+                // Insights Feature
+                setupModal(
+                    'insights-button', 'insights-modal-overlay', 'insights-modal-content',
+                    `You are an expert civil engineer and construction manager specializing in industrial concrete flooring. Provide a concise, actionable checklist of critical considerations and potential risks. Focus on practical advice. Format as a clean, bulleted list.`,
+                    () => `Based on the following project specs for a fiber-reinforced concrete floor in Riga, Latvia, generate a checklist of key construction considerations and risks:\n\n${getCurrentSpecsAsText()}`
+                );
+
+                // Cost Estimate Feature
+                setupModal(
+                    'cost-button', 'cost-modal-overlay', 'cost-modal-content',
+                    `You are a quantity surveyor and cost estimator for construction projects, specializing in industrial flooring in Northern Europe. Provide a detailed cost estimate breakdown for the given project. Use current market rates for Riga, Latvia (in EUR). The output should be a well-formatted table in Markdown. Include line items, quantities, unit rates, and total costs. Add a contingency percentage.`,
+                    () => `Generate a cost estimate for the following project in Riga, Latvia:\n\n${getCurrentSpecsAsText()}`
+                );
+
+                // Schedule Feature
+                setupModal(
+                    'schedule-button', 'schedule-modal-overlay', 'schedule-modal-content',
+                    `You are a project manager specializing in industrial construction. Create a project schedule for the given concrete floor project in Riga, Latvia. Present the schedule as a simple text-based Gantt chart. Include key phases like Sub-base Preparation, Formwork & Reinforcement, Concrete Pouring, Curing, Joint Cutting, and Sealing. Assume a start date of ${startDate}.`,
+                    () => `Generate a project schedule for the following project in Riga, Latvia, starting on ${startDate}:\n\n${getCurrentSpecsAsText()}`
+                );
+                
+                // Calculation Report Feature
+                setupModal(
+                    'report-button', 'report-modal-overlay', 'report-modal-content',
+                    `You are a professional structural engineer. Your task is to generate a formal structural calculation report for a fiber-reinforced concrete ground-bearing slab, based on the provided project specifications and following Eurocode 2 and TR34 principles.
+
+**CRITICAL INSTRUCTION:** The provided 'Ground Stiffness (k)' value is a key input. You MUST perform a structural analysis to determine if the specified 'Steel Fibers' dosage is sufficient for the given loads and this ground stiffness.
+
+The report must be well-structured:
+1.  **Project Data:** Summarize all input parameters.
+2.  **Load Calculations:** Detail the UDL, Racking, and Forklift loads.
+3.  **Slab Analysis (Critical):** Analyze the slab's capacity based on the provided 'Ground Stiffness (k)'. Explicitly mention the high bending moments expected from a low 'k' value.
+4.  **Structural Checks:** Perform simplified calculations for bending capacity and punching shear.
+5.  **Material Specification (Critical):**
+    * **Verify the 'Steel Fibers' dosage.**
+    * If the provided dosage is **INSUFFICIENT** for the loads and the ground stiffness, you MUST state this clearly.
+    * In case of insufficiency, you MUST **recommend a new, appropriate fiber dosage** (e.g., "45 kg/m³", "50 kg/m³", etc.) required to make the design safe.
+6.  **Conclusion:** State whether the slab design is adequate *as specified*. If not, clearly state what needs to be changed (i.e., the fiber dosage).
+
+Format the output using Markdown for clarity.`,
+                    () => `Generate a structural calculation report for the following project in Riga, Latvia:\n\n${getCurrentSpecsAsText()}`
+                );
+
+                // Drawings Feature
+                setupModal(
+                    'drawings-button', 'drawings-modal-overlay', 'drawings-modal-content',
+                    `You are a senior CAD technician specializing in concrete structures. Your task is to generate a set of key construction drawings for the provided project specifications. The output must be clear, well-structured text that represents the drawings. Use text characters (like |, -, +, etc.) and labels to create the diagrams. The drawings should include:
+1.  **Plan View:** Show the overall dimensions (e.g., 50m x 50m), the grid of saw-cut control joints (e.g., at 6m spacing), and the central construction joint.
+2.  **Cross-Section View:** Show the slab thickness, the sub-base layer, and indicate the location of steel fibers within the concrete.
+3.  **Joint Detail View:** Provide a close-up of the central construction joint, showing the thickened edge and the reinforcement mesh placement.
+Format the output using Markdown code blocks for each drawing for clear presentation.`,
+                    () => `Generate a set of text-based construction drawings for the following project in Riga, Latvia:\n\n${getCurrentSpecsAsText()}`
+                );
+            }
+
+            async function callGemini(userQuery, systemPrompt, retries = 3, delay = 1000) {
+                // This is the *only* line you need to edit.
+                // Paste your key from Google AI Studio here.
+                
+                // ===============================================
+                //       ▼▼▼ PASTE YOUR API KEY HERE (2 of 2) ▼▼▼
+                // =================S==============================
+                const apiKey = "AIzaSyCv6TgTiTuwvHZPPg6YT0XS8JiElMkPaeE";
+                
+                // Stop if the key is missing.
+                if (apiKey.startsWith("PASTE_") || apiKey === "") {
+                    document.getElementById('api-key-modal-overlay').style.display = 'flex';
+                    throw new Error("API Key is missing.");
+                }
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && retries > 0) { // Throttling
+                            await new Promise(res => setTimeout(res, delay));
+                            return callGemini(userQuery, systemPrompt, retries - 1, delay * 2);
+                        }
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        return candidate.content.parts[0].text;
+                    } else {
+                        throw new Error('No valid content received from API.');
+                    }
+                } catch (error) {
+                     if (retries > 0) {
+                        await new Promise(res => setTimeout(res, delay));
+                        return callGemini(userQuery, systemPrompt, retries - 1, delay * 2);
+                    }
+                    console.error('API call failed after multiple retries:', error);
+                    throw error;
+                }
+            }
+
+
+            function addReinforcementVisuals() {
+                const reinfY = -0.1; // Position slightly below the top surface
+                const reinfWidth = 1.5; // Width of the reinforcement mesh strip
+                
+                // --- Reinforcement Mesh Material ---
+                const reinfMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x42a5f5, // Blue color
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.6,
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(reinfMaterial);
+
+                // --- Mesh at Construction Joint ---
+                const constrMeshGeom = new THREE.PlaneGeometry(reinfWidth, 50, 5, 50);
+                const constrMesh = new THREE.Mesh(constrMeshGeom, reinfMaterial);
+                constrMesh.rotation.x = -Math.PI / 2;
+                constrMesh.position.set(0, reinfY, 0);
+                scene.add(constrMesh);
+                
+                // --- Mesh at one Saw-cut Joint ---
+                const sawCutMeshGeom = new THREE.PlaneGeometry(50, reinfWidth, 50, 5);
+                const sawCutMesh = new THREE.Mesh(sawCutMeshGeom, reinfMaterial);
+                sawCutMesh.rotation.x = -Math.PI / 2;
+                sawCutMesh.position.set(0, reinfY, 6); // Position at the first saw-cut joint
+                scene.add(sawCutMesh);
+
+                // --- Reinforcement Label ---
+                const reinfLabelDiv = document.createElement('div');
+                reinfLabelDiv.className = 'load-label';
+                reinfLabelDiv.textContent = 'Reinforcement Mesh at Joints';
+                reinfLabelDiv.style.color = '#1e88e5'; // Blue label text
+                const reinfLabel = new THREE.CSS2DObject(reinfLabelDiv);
+                reinfLabel.position.set(3, 0, 0);
+                scene.add(reinfLabel);
+            }
+
+            function addLoadVisuals() {
+                const topY = 0.05; // Y position for load markers
+
+                // --- Racking Point Loads ---
+                const rackLoadGroup = new THREE.Group();
+                const rackGeom = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
+                const rackMat = new THREE.MeshLambertMaterial({ 
+                    color: 0xffa726, // Orange
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(rackMat);
+                const rackRows = 4;
+                const rackCols = 10;
+                const rowSpacing = 3;
+                const colSpacing = 2;
+
+                for(let r = 0; r < rackRows; r++) {
+                    for(let c = 0; c < rackCols; c++) {
+                        const rackPost = new THREE.Mesh(rackGeom, rackMat);
+                        rackPost.position.set(
+                            -18 + r * rowSpacing * 2,
+                            topY,
+                            -20 + c * colSpacing
+                        );
+                        rackLoadGroup.add(rackPost);
+                    }
+                }
+                scene.add(rackLoadGroup);
+                
+                const rackLabelDiv = document.createElement('div');
+                rackLabelDiv.className = 'load-label';
+                rackLabelDiv.textContent = 'Racking Point Loads';
+                const rackLabel = new THREE.CSS2DObject(rackLabelDiv);
+                rackLabel.position.set(-18, topY, -24);
+                scene.add(rackLabel);
+
+                // --- Forklift Load ---
+                const forkliftGroup = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({
+                    color: 0xfdd835, // Yellow
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                 clippedMaterials.push(bodyMat);
+                const mastMat = new THREE.MeshLambertMaterial({
+                    color: 0x616161, // Gray
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(mastMat);
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 3), bodyMat);
+                body.position.y = 0.75 + topY;
+                const mast = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.2), mastMat);
+                mast.position.set(-0.7, 1.5 + topY, 0);
+                
+                forkliftGroup.add(body, mast);
+
+                // Wheels and load arrows
+                const wheelPositions = [
+                    new THREE.Vector3(-0.6, 0.25 + topY, 1), 
+                    new THREE.Vector3(-0.6, 0.25 + topY, -1),
+                ];
+                const wheelGeom = new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16);
+                wheelGeom.rotateX(Math.PI / 2);
+                const wheelMat = new THREE.MeshBasicMaterial({
+                    color: 0x212121,
+                    clippingPlanes: [clippingPlane],
+                });
+                clippedMaterials.push(wheelMat);
+
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+                    wheel.position.copy(pos);
+                    forkliftGroup.add(wheel);
+                    
+                    const arrow = new THREE.ArrowHelper(
+                        new THREE.Vector3(0, -1, 0), // direction
+                        pos, // origin
+                        2, // length
+                        0xc62828, // color
+                        0.5, 0.3
+                    );
+                    forkliftGroup.add(arrow);
+                });
+
+                forkliftGroup.position.set(15, 0, 15);
+                scene.add(forkliftGroup);
+
+                const forkliftLabelDiv = document.createElement('div');
+                forkliftLabelDiv.className = 'load-label';
+                forkliftLabelDiv.textContent = 'Forklift Wheel Loads';
+                const forkliftLabel = new THREE.CSS2DObject(forkliftLabelDiv);
+                forkliftLabel.position.set(15, 3, 15);
+                scene.add(forkliftLabel);
+            }
+
+            function addDimensions() {
+                const halfWidth = 50 / 2;
+                const halfDepth = 50 / 2;
+                const topY = 0.01;
+                const offset = 5;
+                const dimLineMaterial = new THREE.LineBasicMaterial({ color: 0x333333 });
+                const tickSize = 1.5;
+
+                const zDimPoints = [
+                    new THREE.Vector3(halfWidth + offset, topY, -halfDepth), new THREE.Vector3(halfWidth + offset, topY, halfDepth),
+                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, -halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, -halfDepth),
+                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, halfDepth)
+                ];
+                const zDimGeometry = new THREE.BufferGeometry().setFromPoints(zDimPoints);
+                scene.add(new THREE.LineSegments(zDimGeometry, dimLineMaterial));
+
+                const zLabelDiv = document.createElement('div');
+                zLabelDiv.className = 'dimension-label';
+                zLabelDiv.textContent = '50.0 m';
+                const zDimLabel = new THREE.CSS2DObject(zLabelDiv);
+                zDimLabel.position.set(halfWidth + offset + 1, topY, 0);
+                scene.add(zDimLabel);
+
+                const xDimPoints = [
+                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset), new THREE.Vector3(halfWidth, topY, halfDepth + offset),
+                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(-halfWidth, topY, halfDepth + offset + tickSize / 2),
+                    new THREE.Vector3(halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(halfWidth, topY, halfDepth + offset + tickSize / 2)
+                ];
+                const xDimGeometry = new THREE.BufferGeometry().setFromPoints(xDimPoints);
+                scene.add(new THREE.LineSegments(xDimGeometry, dimLineMaterial));
+
+                const xLabelDiv = document.createElement('div');
+                xLabelDiv.className = 'dimension-label';
+                xLabelDiv.textContent = '50.0 m';
+                const xDimLabel = new THREE.CSS2DObject(xLabelDiv);
+                xDimLabel.position.set(0, topY, halfDepth + offset + 1);
+                scene.add(xDimLabel);
+            }
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                if (labelRenderer) labelRenderer.setSize(window.innerWidth, window.innerHeight);
+
+                if (fiberRenderer) {
+                    const container = document.getElementById('fiber-view');
+                    fiberCamera.aspect = container.clientWidth / container.clientHeight;
+                    fiberCamera.updateProjectionMatrix();
+                    fiberRenderer.setSize(container.clientWidth, container.clientHeight);
+                }
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                // Main scene
+                if(controls) controls.update();
+                renderer.render(scene, camera);
+                if(labelRenderer) labelRenderer.render(scene, camera);
+
+                // Fiber scene
+                if(fiberControls) fiberControls.update();
+                if(fiberRenderer) fiberRenderer.render(fiberScene, fiberCamera);
+            }
+
+            init();
+        })();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
