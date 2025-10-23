@@ -1,14 +1,8 @@
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <!-- 
-      NEW FIX: This Content Security Policy (CSP) tag is required to allow the page
-      to connect to the Google Gemini API and load the 3D model scripts from CDNs.
-    -->
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; connect-src 'self' data: blob: https://generativelanguage.googleapis.com; font-src 'self' data: https://fonts.gstatic.com;">
-
     <title>5D Fibre Concrete Floor Designer</title>
     <style>
         body {
@@ -111,22 +105,6 @@
             font-family: 'Courier New', Courier, monospace;
             white-space: pre-wrap;
             line-height: 1.6;
-        }
-        /* New style for the API key warning modal */
-        #api-key-modal-content {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            white-space: normal;
-            line-height: 1.6;
-        }
-        #api-key-modal-content h2 {
-            color: #c62828; /* Red */
-            margin-top: 0;
-        }
-        #api-key-modal-content code {
-            background-color: #f0f0f0;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', Courier, monospace;
         }
         .loading-overlay {
             position: fixed;
@@ -503,26 +481,6 @@
     <div id="gemini-loading-overlay" class="loading-overlay">
         <div class="loading-spinner"></div>
     </div>
-    
-    <!-- NEW: Modal for API Key Warning -->
-    <div id="api-key-modal-overlay" class="modal-overlay">
-        <div class="modal-content" id="api-key-modal-content">
-            <h2>Configuration Required</h2>
-            <p>This tool's AI features are not yet enabled. To activate them, you must add a Google Gemini API key.</p>
-            <strong>Instructions:</strong>
-            <ol>
-                <li>Go to <strong>Google AI Studio</strong> (ai.google.dev) and generate a free API key.</li>
-                <li>Open this <code>index.html</code> file in a text editor (like VS Code).</li>
-                <li>Find the <code>&lt;script&gt;</code> tag at the very bottom of the file.</li>
-                <li>Locate the line: <code>const apiKey = "PASTE_YOUR_GEMINI_API_KEY_HERE";</code></li>
-                <li>Replace the placeholder text with your actual API key.</li>
-                <li>Save the file and re-upload it to your web host.</li>
-            </ol>
-            <p style="text-align: center; margin-top: 20px;">
-                <button id="api-key-modal-close" class="ai-button">I Understand</button>
-            </p>
-        </div>
-    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
@@ -533,6 +491,10 @@
             let clippedMaterials = [];
 
             let fiberScene, fiberCamera, fiberRenderer, fiberControls;
+            
+            // --- NEW: Top-level variables for rebuildable objects ---
+            let modelGroup = new THREE.Group();
+            let xDimLabel, zDimLabel; // To store dimension labels for removal
 
             // --- NEW: Helper function to read specs from inputs ---
             function getCurrentSpecsAsText() {
@@ -598,6 +560,12 @@
                 inputs.forEach(id => {
                     document.getElementById(id).addEventListener('input', updateCalculatedSpecs);
                 });
+                
+                // --- NEW: Add listeners to rebuild model on dimension change ---
+                const dimensionInputs = ['spec-width', 'spec-depth', 'spec-thickness'];
+                dimensionInputs.forEach(id => {
+                    document.getElementById(id).addEventListener('input', buildModel);
+                });
             }
 
 
@@ -633,83 +601,12 @@
                 directionalLight.position.set(50, 50, 50);
                 scene.add(directionalLight);
 
-                // --- FLOOR SLAB ---
-                const slabWidth = 50;
-                const slabDepth = 50;
-                const slabHeight = 2; // Exaggerated thickness for better visibility
-                const halfWidth = slabWidth / 2;
-                const halfDepth = slabDepth / 2;
-                
-                const slabGeometry = new THREE.BoxGeometry(slabWidth, slabHeight, slabDepth);
-                const slabMaterial = new THREE.MeshPhongMaterial({ 
-                    color: 0xcccccc,
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                clippedMaterials.push(slabMaterial);
-                const slab = new THREE.Mesh(slabGeometry, slabMaterial);
-                slab.position.y = -slabHeight / 2;
-                scene.add(slab);
+                // --- NEW: Add the main model group to the scene ---
+                scene.add(modelGroup);
 
-                // --- PERIMETER BEAMS ---
-                const beamWidth = 0.5;
-                const beamLengthX = slabWidth + (beamWidth * 2); // 51
-                const beamLengthZ = slabDepth; // 50
-                const beamHeight = slabHeight; // Same height as slab for vis
-                
-                const beamMaterial = new THREE.MeshPhongMaterial({
-                    color: 0xaaaaaa, // Slightly darker than slab
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                clippedMaterials.push(beamMaterial);
-
-                // Beam 1 (Positive Z)
-                const beamGeomZ1 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
-                const beamZ1 = new THREE.Mesh(beamGeomZ1, beamMaterial);
-                beamZ1.position.set(0, -beamHeight / 2, halfDepth + beamWidth / 2); // (0, -1, 25.25)
-                scene.add(beamZ1);
-                
-                // Beam 2 (Negative Z)
-                const beamGeomZ2 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
-                const beamZ2 = new THREE.Mesh(beamGeomZ2, beamMaterial);
-                beamZ2.position.set(0, -beamHeight / 2, -halfDepth - beamWidth / 2); // (0, -1, -25.25)
-                scene.add(beamZ2);
-                
-                // Beam 3 (Positive X)
-                const beamGeomX1 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
-                const beamX1 = new THREE.Mesh(beamGeomX1, beamMaterial);
-                beamX1.position.set(halfWidth + beamWidth / 2, -beamHeight / 2, 0); // (25.25, -1, 0)
-                scene.add(beamX1);
-
-                // Beam 4 (Negative X)
-                const beamGeomX2 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
-                const beamX2 = new THREE.Mesh(beamGeomX2, beamMaterial);
-                beamX2.position.set(-halfWidth - beamWidth / 2, -beamHeight / 2, 0); // (-25.25, -1, 0)
-                scene.add(beamX2);
-
-
-                // --- JOINT LINES ---
-                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x555555 });
-                const constructionLineMaterial = new THREE.LineBasicMaterial({ color: 0x222222 }); 
-
-                const topY = 0.01;
-
-                const gridSize = 6;
-                for (let i = -halfWidth + gridSize; i < halfWidth; i += gridSize) {
-                    const points = [new THREE.Vector3(i, topY, -halfDepth), new THREE.Vector3(i, topY, halfDepth)];
-                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-                    scene.add(new THREE.Line(geometry, lineMaterial));
-                }
-                 for (let i = -halfDepth + gridSize; i < halfDepth; i += gridSize) {
-                    const points = [new THREE.Vector3(-halfWidth, topY, i), new THREE.Vector3(halfWidth, topY, i)];
-                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-                    scene.add(new THREE.Line(geometry, lineMaterial));
-                }
-
-                const constructionPoints = [new THREE.Vector3(0, topY, -halfDepth), new THREE.Vector3(0, topY, halfDepth)];
-                const constructionGeometry = new THREE.BufferGeometry().setFromPoints(constructionPoints);
-                scene.add(new THREE.Line(constructionGeometry, constructionLineMaterial));
+                // --- FLOOR SLAB --- (REMOVED from here, moved to buildModel)
+                // --- PERIMETER BEAMS --- (REMOVED from here, moved to buildModel)
+                // --- JOINT LINES --- (REMOVED from here, moved to buildModel)
 
                 // --- CONTROLS and other elements (Load scripts then initialize) ---
                 const controlsScript = document.createElement('script');
@@ -733,9 +630,9 @@
                         controls.maxDistance = 200;
                         controls.maxPolarAngle = Math.PI / 2; 
 
-                        addDimensions();
-                        addLoadVisuals(); 
-                        addReinforcementVisuals(); 
+                        // --- NEW: Build the initial model ---
+                        buildModel();
+                        
                         setupFiberView(); // Initialize the fiber model view
 
                         animate();
@@ -750,35 +647,246 @@
                 setupDraggableSpecBox(); // <-- ADDED THIS
                 updateCalculatedSpecs(); // Calculate totals on load
                 setupSpecListeners(); // Add listeners for live calculation
-                
-                checkApiKey(); // <-- ADDED THIS
             }
             
-            // --- NEW: Function to check for API Key ---
-            function checkApiKey() {
-                // This is the variable you need to replace
+            // --- NEW: Function to build/rebuild the entire 3D model geometry ---
+            function buildModel() {
+                // --- 1. Clear old model objects ---
                 
-                // ===============================================
-                //       ▼▼▼ PASTE YOUR API KEY HERE (1 of 2) ▼▼▼
-                // ===============================================
-                const apiKey = "AIzaSyCv6TgTiTuwvHZPPg6YT0XS8JiElMkPaeE"; 
+                // Remove old dimension labels from the scene
+                if (xDimLabel) scene.remove(xDimLabel);
+                if (zDimLabel) scene.remove(zDimLabel);
                 
-                // CRITICAL SECURITY WARNING
-                // This key is visible to anyone who views this page.
-                // Go to your Google Cloud dashboard and restrict this key to
-                // "HTTP referrers" and add your domain (e.g., "your-site.netlify.app")
-                // to prevent others from stealing and using your key.
-
-                const overlay = document.getElementById('api-key-modal-overlay');
-                if (apiKey.startsWith("PASTE_") || apiKey === "") {
-                    overlay.style.display = 'flex';
+                // Clear all objects from the model group
+                while (modelGroup.children.length > 0) {
+                    modelGroup.remove(modelGroup.children[0]);
                 }
                 
-                document.getElementById('api-key-modal-close').addEventListener('click', () => {
-                    overlay.style.display = 'none';
+                // (Note: In a larger app, we'd also dispose of geometry and materials)
+                
+                // --- 2. Read current specs ---
+                const slabWidth = parseFloat(document.getElementById('spec-width').value) || 50;
+                const slabDepth = parseFloat(document.getElementById('spec-depth').value) || 50;
+                const slabThicknessMM = parseFloat(document.getElementById('spec-thickness').value) || 200;
+                
+                // Exaggerate thickness for visibility (e.g., 200mm = 2 units)
+                const slabHeight = slabThicknessMM * 0.01; 
+                
+                const halfWidth = slabWidth / 2;
+                const halfDepth = slabDepth / 2;
+                const topY = 0.01; // Y position for lines/loads
+                
+                // --- 3. Re-create FLOOR SLAB ---
+                const slabGeometry = new THREE.BoxGeometry(slabWidth, slabHeight, slabDepth);
+                const slabMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xcccccc,
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
                 });
-            }
+                clippedMaterials.push(slabMaterial);
+                const slab = new THREE.Mesh(slabGeometry, slabMaterial);
+                slab.position.y = -slabHeight / 2;
+                modelGroup.add(slab);
 
+                // --- 4. Re-create PERIMETER BEAMS ---
+                const beamWidth = 0.5;
+                const beamLengthX = slabWidth + (beamWidth * 2);
+                const beamLengthZ = slabDepth;
+                const beamHeight = slabHeight; // Match slab visual height
+                
+                const beamMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xaaaaaa, 
+                    clippingPlanes: [clippingPlane],
+                    clipShadows: true
+                });
+                clippedMaterials.push(beamMaterial);
+
+                const beamGeomZ1 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
+                const beamZ1 = new THREE.Mesh(beamGeomZ1, beamMaterial);
+                beamZ1.position.set(0, -beamHeight / 2, halfDepth + beamWidth / 2);
+                modelGroup.add(beamZ1);
+                
+                const beamGeomZ2 = new THREE.BoxGeometry(beamLengthX, beamHeight, beamWidth);
+                const beamZ2 = new THREE.Mesh(beamGeomZ2, beamMaterial);
+                beamZ2.position.set(0, -beamHeight / 2, -halfDepth - beamWidth / 2);
+                modelGroup.add(beamZ2);
+                
+                const beamGeomX1 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
+                const beamX1 = new THREE.Mesh(beamGeomX1, beamMaterial);
+                beamX1.position.set(halfWidth + beamWidth / 2, -beamHeight / 2, 0);
+                modelGroup.add(beamX1);
+
+                const beamGeomX2 = new THREE.BoxGeometry(beamWidth, beamHeight, beamLengthZ);
+                const beamX2 = new THREE.Mesh(beamGeomX2, beamMaterial);
+                beamX2.position.set(-halfWidth - beamWidth / 2, -beamHeight / 2, 0);
+                modelGroup.add(beamX2);
+
+                // --- 5. Re-create JOINT LINES ---
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x555555 });
+                const constructionLineMaterial = new THREE.LineBasicMaterial({ color: 0x222222 }); 
+                
+                const gridSize = 6; // 6m grid
+                for (let i = -halfWidth + gridSize; i < halfWidth; i += gridSize) {
+                    const points = [new THREE.Vector3(i, topY, -halfDepth), new THREE.Vector3(i, topY, halfDepth)];
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    modelGroup.add(new THREE.Line(geometry, lineMaterial));
+                }
+                 for (let i = -halfDepth + gridSize; i < halfDepth; i += gridSize) {
+                    const points = [new THREE.Vector3(-halfWidth, topY, i), new THREE.Vector3(halfWidth, topY, i)];
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    modelGroup.add(new THREE.Line(geometry, lineMaterial));
+                }
+
+                const constructionPoints = [new THREE.Vector3(0, topY, -halfDepth), new THREE.Vector3(0, topY, halfDepth)];
+                const constructionGeometry = new THREE.BufferGeometry().setFromPoints(constructionPoints);
+                modelGroup.add(new THREE.Line(constructionGeometry, constructionLineMaterial));
+                
+                // --- 6. Re-create DIMENSIONS ---
+                const offset = 5;
+                const dimLineMaterial = new THREE.LineBasicMaterial({ color: 0x333333 });
+                const tickSize = 1.5;
+
+                const zDimPoints = [
+                    new THREE.Vector3(halfWidth + offset, topY, -halfDepth), new THREE.Vector3(halfWidth + offset, topY, halfDepth),
+                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, -halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, -halfDepth),
+                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, halfDepth)
+                ];
+                const zDimGeometry = new THREE.BufferGeometry().setFromPoints(zDimPoints);
+                modelGroup.add(new THREE.LineSegments(zDimGeometry, dimLineMaterial));
+
+                const zLabelDiv = document.createElement('div');
+                zLabelDiv.className = 'dimension-label';
+                zLabelDiv.textContent = `${slabDepth.toFixed(1)} m`;
+                zDimLabel = new THREE.CSS2DObject(zLabelDiv); // Assign to global
+                zDimLabel.position.set(halfWidth + offset + 1, topY, 0);
+                scene.add(zDimLabel); // Add label to scene
+
+                const xDimPoints = [
+                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset), new THREE.Vector3(halfWidth, topY, halfDepth + offset),
+                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(-halfWidth, topY, halfDepth + offset + tickSize / 2),
+                    new THREE.Vector3(halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(halfWidth, topY, halfDepth + offset + tickSize / 2)
+                ];
+                const xDimGeometry = new THREE.BufferGeometry().setFromPoints(xDimPoints);
+                modelGroup.add(new THREE.LineSegments(xDimGeometry, dimLineMaterial));
+
+                const xLabelDiv = document.createElement('div');
+                xLabelDiv.className = 'dimension-label';
+                xLabelDiv.textContent = `${slabWidth.toFixed(1)} m`;
+                xDimLabel = new THREE.CSS2DObject(xLabelDiv); // Assign to global
+                xDimLabel.position.set(0, topY, halfDepth + offset + 1);
+                scene.add(xDimLabel); // Add label to scene
+                
+                // --- 7. Re-create Reinforcement Visuals ---
+                const reinfY = -0.1; 
+                const reinfWidth = 1.5; 
+                const reinfMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x42a5f5, wireframe: true, transparent: true, opacity: 0.6,
+                    clippingPlanes: [clippingPlane], clipShadows: true
+                });
+                clippedMaterials.push(reinfMaterial);
+
+                const constrMeshGeom = new THREE.PlaneGeometry(reinfWidth, slabDepth, 5, 50);
+                const constrMesh = new THREE.Mesh(constrMeshGeom, reinfMaterial);
+                constrMesh.rotation.x = -Math.PI / 2;
+                constrMesh.position.set(0, reinfY, 0);
+                modelGroup.add(constrMesh);
+                
+                const sawCutMeshGeom = new THREE.PlaneGeometry(slabWidth, reinfWidth, 50, 5);
+                const sawCutMesh = new THREE.Mesh(sawCutMeshGeom, reinfMaterial);
+                sawCutMesh.rotation.x = -Math.PI / 2;
+                sawCutMesh.position.set(0, reinfY, 6); 
+                modelGroup.add(sawCutMesh);
+
+                const reinfLabelDiv = document.createElement('div');
+                reinfLabelDiv.className = 'load-label';
+                reinfLabelDiv.textContent = 'Reinforcement Mesh at Joints';
+                reinfLabelDiv.style.color = '#1e88e5';
+                const reinfLabel = new THREE.CSS2DObject(reinfLabelDiv);
+                reinfLabel.position.set(3, 0, 0);
+                modelGroup.add(reinfLabel); // Add to group
+                
+                // --- 8. Re-create Load Visuals ---
+                // (Note: These are static, but good practice to rebuild with model)
+                const rackLoadGroup = new THREE.Group();
+                const rackGeom = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
+                const rackMat = new THREE.MeshLambertMaterial({ 
+                    color: 0xffa726, clippingPlanes: [clippingPlane], clipShadows: true
+                });
+                clippedMaterials.push(rackMat);
+                
+                // Keep racking in a consistent area, regardless of slab size
+                const rackRows = 4;
+                const rackCols = 10;
+                const rowSpacing = 3;
+                const colSpacing = 2;
+                for(let r = 0; r < rackRows; r++) {
+                    for(let c = 0; c < rackCols; c++) {
+                        const rackPost = new THREE.Mesh(rackGeom, rackMat);
+                        rackPost.position.set(
+                            -18 + r * rowSpacing * 2, topY, -20 + c * colSpacing
+                        );
+                        rackLoadGroup.add(rackPost);
+                    }
+                }
+                modelGroup.add(rackLoadGroup);
+                
+                const rackLabelDiv = document.createElement('div');
+                rackLabelDiv.className = 'load-label';
+                rackLabelDiv.textContent = 'Racking Point Loads';
+                const rackLabel = new THREE.CSS2DObject(rackLabelDiv);
+                rackLabel.position.set(-18, topY, -24);
+                modelGroup.add(rackLabel); // Add to group
+
+                // Forklift
+                const forkliftGroup = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({
+                    color: 0xfdd835, clippingPlanes: [clippingPlane], clipShadows: true
+                });
+                 clippedMaterials.push(bodyMat);
+                const mastMat = new THREE.MeshLambertMaterial({
+                    color: 0x616161, clippingPlanes: [clippingPlane], clipShadows: true
+                });
+                clippedMaterials.push(mastMat);
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 3), bodyMat);
+                body.position.y = 0.75 + topY;
+                const mast = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.2), mastMat);
+                mast.position.set(-0.7, 1.5 + topY, 0);
+                forkliftGroup.add(body, mast);
+
+                const wheelPositions = [
+                    new THREE.Vector3(-0.6, 0.25 + topY, 1), 
+                    new THREE.Vector3(-0.6, 0.25 + topY, -1),
+                ];
+                const wheelGeom = new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16);
+                wheelGeom.rotateX(Math.PI / 2);
+                const wheelMat = new THREE.MeshBasicMaterial({
+                    color: 0x212121, clippingPlanes: [clippingPlane],
+                });
+                clippedMaterials.push(wheelMat);
+
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+                    wheel.position.copy(pos);
+                    forkliftGroup.add(wheel);
+                    
+                    const arrow = new THREE.ArrowHelper(
+                        new THREE.Vector3(0, -1, 0), pos, 2, 0xc62828, 0.5, 0.3
+                    );
+                    forkliftGroup.add(arrow);
+                });
+
+                forkliftGroup.position.set(15, 0, 15);
+                modelGroup.add(forkliftGroup);
+
+                const forkliftLabelDiv = document.createElement('div');
+                forkliftLabelDiv.className = 'load-label';
+                forkliftLabelDiv.textContent = 'Forklift Wheel Loads';
+                const forkliftLabel = new THREE.CSS2DObject(forkliftLabelDiv);
+                forkliftLabel.position.set(15, 3, 15);
+                modelGroup.add(forkliftLabel); // Add to group
+            }
+            
             function setupFiberView() {
                 const container = document.getElementById('fiber-view');
                 const width = container.clientWidth;
@@ -874,6 +982,55 @@
                 });
             }
             
+            // --- NEW: Function to handle spec updates from chat ---
+            async function handleSpecUpdate(args) {
+                const { specName, newValue } = args;
+                
+                const specMap = {
+                    'width': 'spec-width',
+                    'length': 'spec-width', // <-- ADDED ALIAS
+                    'depth': 'spec-depth',
+                    'thickness': 'spec-thickness',
+                    'fibers': 'spec-fibers',
+                    'concrete': 'spec-concrete',
+                    'reinforcement': 'spec-reinf',
+                    'ground_stiffness': 'spec-ground-k',
+                    'beams': 'spec-beams',
+                    'udl': 'spec-udl',
+                    'racking_load': 'spec-racking',
+                    'forklift_load': 'spec-forklift'
+                };
+                
+                // Find the ID, converting snake_case from AI to kebab-case/custom
+                const elementId = specMap[specName.toLowerCase()];
+                let note = null;
+
+                if (elementId) {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.value = newValue;
+                        updateCalculatedSpecs(); // Recalculate totals
+                        
+                        if (specName === 'width' || specName === 'depth' || specName === 'thickness' || specName === 'length') { // <-- ADDED ALIAS
+                            // --- NEW: Call buildModel and update note ---
+                            buildModel();
+                            note = "Specification updated. The 3D model has been rebuilt to reflect the new dimensions.";
+                        }
+                        
+                        return { 
+                            status: "success", 
+                            specName: specName, 
+                            newValue: newValue,
+                            note: note || "Specification updated successfully."
+                        };
+                    } else {
+                        return { status: "error", message: `Could not find input element for ${specName}.` };
+                    }
+                } else {
+                    return { status: "error", message: `Unknown specification name: ${specName}.` };
+                }
+            }
+            
             function setupChatFeature() {
                 const toggleButton = document.getElementById('chat-toggle-button');
                 const chatWidget = document.getElementById('chat-widget');
@@ -881,6 +1038,34 @@
                 const input = document.getElementById('chat-input');
                 const sendButton = document.getElementById('chat-send');
                 let chatOpen = false;
+                let chatHistory = []; // <-- NEW: Manage chat history
+                let isAwaitingResponse = false; // <-- NEW: Prevent double-sends
+
+                // NEW: Tool definition for Gemini
+                const tools = [
+                    {
+                        "functionDeclarations": [
+                            {
+                                "name": "updateSpecification",
+                                "description": "Updates a specific parameter of the concrete slab project in the specification box.",
+                                "parameters": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "specName": {
+                                            "type": "STRING",
+                                            "description": "The name of the specification to update. Examples: 'width', 'depth', 'thickness', 'fibers', 'udl', 'racking_load', 'forklift_load', 'ground_stiffness'."
+                                        },
+                                        "newValue": {
+                                            "type": "STRING",
+                                            "description": "The new value for the specification."
+                                        }
+                                    },
+                                    "required": ["specName", "newValue"]
+                                }
+                            }
+                        ]
+                    }
+                ];
 
                 toggleButton.addEventListener('click', () => {
                     chatOpen = !chatOpen;
@@ -897,28 +1082,112 @@
 
                 async function handleSendMessage() {
                     const messageText = input.value.trim();
-                    if (messageText === '') return;
+                    if (messageText === '' || isAwaitingResponse) return; // <-- Check lock
 
+                    isAwaitingResponse = true; // <-- Set lock
                     addMessage(messageText, 'user');
                     input.value = '';
+                    
+                    // Add user message to history
+                    chatHistory.push({
+                        role: 'user',
+                        parts: [{ text: messageText }]
+                    });
 
                     showLoadingIndicator();
 
                     // Dynamically build the system prompt with current specs
                     const currentSpecList = getCurrentSpecsAsText();
-                    const dynamicChatSystemPrompt = `You are a helpful AI assistant for a 3D building project viewer. Your job is to answer questions based *only* on the project specifications provided. Be concise and helpful. The project specs are:
+                    const dynamicChatSystemPrompt = `You are a helpful AI assistant for a 3D building project viewer. Your job is to answer questions based on the project specifications provided.
+You also have a tool named 'updateSpecification' to change the project specs. When a user asks to change a value (e.g., "set thickness to 220mm"), you MUST use this tool.
+After the tool is called, you will receive a confirmation. Base your final response on that confirmation.
+If the user asks a question you cannot answer, politely say you don't have that information.
+The current project specs are:
 ---
 ${currentSpecList}
----
-If the user asks a question you cannot answer from this data, politely say you don't have that information.`;
+---`;
 
                     try {
-                        const aiResponse = await callGemini(messageText, dynamicChatSystemPrompt);
+                        // First call to Gemini
+                        let modelResponse = await callGemini(chatHistory, dynamicChatSystemPrompt, tools);
+                        
+                        let responseParts = modelResponse.candidates[0].content.parts;
+                        
+                        // Add model's first response (could be text or functionCall) to history
+                        chatHistory.push({
+                            role: 'model',
+                            parts: responseParts
+                        });
+                        
+                        let functionCallsExist = false;
+                        let finalResponseText = "";
+
+                        // Loop through all parts for function calls
+                        for (const part of responseParts) {
+                            if (part.functionCall) {
+                                functionCallsExist = true;
+                                const functionCall = part.functionCall;
+                                const functionName = functionCall.name;
+                                
+                                if (functionName === 'updateSpecification') {
+                                    // Call the local JS function
+                                    const functionResult = await handleSpecUpdate(functionCall.args);
+                                    
+                                    // Create the functionResponse part to send back to the model
+                                    const functionResponsePart = {
+                                        "functionResponse": {
+                                            "name": "updateSpecification",
+                                            "response": functionResult
+                                        }
+                                    };
+                                    
+                                    // Add function response to history
+                                    chatHistory.push({
+                                        role: 'function',
+                                        parts: [functionResponsePart]
+                                    });
+                                }
+                            } else if (part.text) {
+                                // Save any text response from this turn
+                                finalResponseText += part.text + "\n";
+                            }
+                        }
+                        
+                        // If we processed any functions, call the model again for a summary
+                        if (functionCallsExist) {
+                            let summaryResponse = await callGemini(chatHistory, dynamicChatSystemPrompt, tools);
+                            let summaryPart = summaryResponse.candidates[0].content.parts[0];
+                            
+                            if (summaryPart.text) {
+                                finalResponseText = summaryPart.text; // This is the new final response
+                            } else {
+                                // Fallback if the summary call fails
+                                finalResponseText = "I've updated the specifications as requested.";
+                            }
+                            
+                            // Add this final summary to history
+                            chatHistory.push({
+                                role: 'model',
+                                parts: [summaryPart]
+                            });
+                        }
+                        
+                        // Display the final text response
                         removeLoadingIndicator();
-                        addMessage(aiResponse, 'ai');
+                        if (finalResponseText.trim()) {
+                            addMessage(finalResponseText.trim(), 'ai');
+                        } else {
+                            addMessage("Sorry, I encountered an issue trying to process that.", 'ai');
+                        }
+
                     } catch (error) {
                         removeLoadingIndicator();
                         addMessage('Sorry, I had trouble connecting. Please try again.', 'ai');
+                        console.error("Error in handleSendMessage:", error);
+                        // Clear the last user message from history on error to allow retry
+                        chatHistory.pop();
+                    } finally {
+                        isAwaitingResponse = false; // <-- Release lock
                     }
                 }
 
@@ -1149,29 +1418,21 @@ Format the output using Markdown code blocks for each drawing for clear presenta
                 );
             }
 
-            async function callGemini(userQuery, systemPrompt, retries = 3, delay = 1000) {
-                // This is the *only* line you need to edit.
-                // Paste your key from Google AI Studio here.
-                
-                // ===============================================
-                //       ▼▼▼ PASTE YOUR API KEY HERE (2 of 2) ▼▼▼
-                // =================S==============================
-                const apiKey = "AIzaSyCv6TgTiTuwvHZPPg6YT0XS8JiElMkPaeE";
-                
-                // Stop if the key is missing.
-                if (apiKey.startsWith("PASTE_") || apiKey === "") {
-                    document.getElementById('api-key-modal-overlay').style.display = 'flex';
-                    throw new Error("API Key is missing.");
-                }
-
+            async function callGemini(history, systemPrompt, tools = null, retries = 3, delay = 1000) {
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
                 const payload = {
-                    contents: [{ parts: [{ text: userQuery }] }],
+                    contents: history, // <-- Use the history directly
                     systemInstruction: {
                         parts: [{ text: systemPrompt }]
                     },
                 };
+                
+                // Add tools to payload if they exist
+                if (tools) {
+                    payload.tools = tools;
+                }
 
                 try {
                     const response = await fetch(apiUrl, {
@@ -1183,205 +1444,39 @@ Format the output using Markdown code blocks for each drawing for clear presenta
                     if (!response.ok) {
                         if (response.status === 429 && retries > 0) { // Throttling
                             await new Promise(res => setTimeout(res, delay));
-                            return callGemini(userQuery, systemPrompt, retries - 1, delay * 2);
+                            return callGemini(history, systemPrompt, tools, retries - 1, delay * 2);
                         }
                         throw new Error(`API call failed with status: ${response.status}`);
                     }
 
                     const result = await response.json();
-                    const candidate = result.candidates?.[0];
-
-                    if (candidate && candidate.content?.parts?.[0]?.text) {
-                        return candidate.content.parts[0].text;
+                    
+                    // Check for valid candidate response
+                    if (result.candidates && result.candidates.length > 0) {
+                        return result; // Return the full response object
                     } else {
-                        throw new Error('No valid content received from API.');
+                        // Handle cases where no candidate is returned, or response is blocked
+                        if (result.promptFeedback) {
+                            console.warn("Gemini call blocked:", result.promptFeedback);
+                            throw new Error(`Request was blocked. Reason: ${result.promptFeedback.blockReason}`);
+                        }
+                        throw new Error('No valid candidates received from API.');
                     }
+                    
                 } catch (error) {
                      if (retries > 0) {
                         await new Promise(res => setTimeout(res, delay));
-                        return callGemini(userQuery, systemPrompt, retries - 1, delay * 2);
+                        return callGemini(history, systemPrompt, tools, retries - 1, delay * 2);
                     }
                     console.error('API call failed after multiple retries:', error);
                     throw error;
                 }
             }
 
-
-            function addReinforcementVisuals() {
-                const reinfY = -0.1; // Position slightly below the top surface
-                const reinfWidth = 1.5; // Width of the reinforcement mesh strip
-                
-                // --- Reinforcement Mesh Material ---
-                const reinfMaterial = new THREE.MeshBasicMaterial({
-                    color: 0x42a5f5, // Blue color
-                    wireframe: true,
-                    transparent: true,
-                    opacity: 0.6,
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                clippedMaterials.push(reinfMaterial);
-
-                // --- Mesh at Construction Joint ---
-                const constrMeshGeom = new THREE.PlaneGeometry(reinfWidth, 50, 5, 50);
-                const constrMesh = new THREE.Mesh(constrMeshGeom, reinfMaterial);
-                constrMesh.rotation.x = -Math.PI / 2;
-                constrMesh.position.set(0, reinfY, 0);
-                scene.add(constrMesh);
-                
-                // --- Mesh at one Saw-cut Joint ---
-                const sawCutMeshGeom = new THREE.PlaneGeometry(50, reinfWidth, 50, 5);
-                const sawCutMesh = new THREE.Mesh(sawCutMeshGeom, reinfMaterial);
-                sawCutMesh.rotation.x = -Math.PI / 2;
-                sawCutMesh.position.set(0, reinfY, 6); // Position at the first saw-cut joint
-                scene.add(sawCutMesh);
-
-                // --- Reinforcement Label ---
-                const reinfLabelDiv = document.createElement('div');
-                reinfLabelDiv.className = 'load-label';
-                reinfLabelDiv.textContent = 'Reinforcement Mesh at Joints';
-                reinfLabelDiv.style.color = '#1e88e5'; // Blue label text
-                const reinfLabel = new THREE.CSS2DObject(reinfLabelDiv);
-                reinfLabel.position.set(3, 0, 0);
-                scene.add(reinfLabel);
-            }
-
-            function addLoadVisuals() {
-                const topY = 0.05; // Y position for load markers
-
-                // --- Racking Point Loads ---
-                const rackLoadGroup = new THREE.Group();
-                const rackGeom = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
-                const rackMat = new THREE.MeshLambertMaterial({ 
-                    color: 0xffa726, // Orange
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                clippedMaterials.push(rackMat);
-                const rackRows = 4;
-                const rackCols = 10;
-                const rowSpacing = 3;
-                const colSpacing = 2;
-
-                for(let r = 0; r < rackRows; r++) {
-                    for(let c = 0; c < rackCols; c++) {
-                        const rackPost = new THREE.Mesh(rackGeom, rackMat);
-                        rackPost.position.set(
-                            -18 + r * rowSpacing * 2,
-                            topY,
-                            -20 + c * colSpacing
-                        );
-                        rackLoadGroup.add(rackPost);
-                    }
-                }
-                scene.add(rackLoadGroup);
-                
-                const rackLabelDiv = document.createElement('div');
-                rackLabelDiv.className = 'load-label';
-                rackLabelDiv.textContent = 'Racking Point Loads';
-                const rackLabel = new THREE.CSS2DObject(rackLabelDiv);
-                rackLabel.position.set(-18, topY, -24);
-                scene.add(rackLabel);
-
-                // --- Forklift Load ---
-                const forkliftGroup = new THREE.Group();
-                const bodyMat = new THREE.MeshLambertMaterial({
-                    color: 0xfdd835, // Yellow
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                 clippedMaterials.push(bodyMat);
-                const mastMat = new THREE.MeshLambertMaterial({
-                    color: 0x616161, // Gray
-                    clippingPlanes: [clippingPlane],
-                    clipShadows: true
-                });
-                clippedMaterials.push(mastMat);
-
-                const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 3), bodyMat);
-                body.position.y = 0.75 + topY;
-                const mast = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 0.2), mastMat);
-                mast.position.set(-0.7, 1.5 + topY, 0);
-                
-                forkliftGroup.add(body, mast);
-
-                // Wheels and load arrows
-                const wheelPositions = [
-                    new THREE.Vector3(-0.6, 0.25 + topY, 1), 
-                    new THREE.Vector3(-0.6, 0.25 + topY, -1),
-                ];
-                const wheelGeom = new THREE.CylinderGeometry(0.25, 0.25, 0.2, 16);
-                wheelGeom.rotateX(Math.PI / 2);
-                const wheelMat = new THREE.MeshBasicMaterial({
-                    color: 0x212121,
-                    clippingPlanes: [clippingPlane],
-                });
-                clippedMaterials.push(wheelMat);
-
-                wheelPositions.forEach(pos => {
-                    const wheel = new THREE.Mesh(wheelGeom, wheelMat);
-                    wheel.position.copy(pos);
-                    forkliftGroup.add(wheel);
-                    
-                    const arrow = new THREE.ArrowHelper(
-                        new THREE.Vector3(0, -1, 0), // direction
-                        pos, // origin
-                        2, // length
-                        0xc62828, // color
-                        0.5, 0.3
-                    );
-                    forkliftGroup.add(arrow);
-                });
-
-                forkliftGroup.position.set(15, 0, 15);
-                scene.add(forkliftGroup);
-
-                const forkliftLabelDiv = document.createElement('div');
-                forkliftLabelDiv.className = 'load-label';
-                forkliftLabelDiv.textContent = 'Forklift Wheel Loads';
-                const forkliftLabel = new THREE.CSS2DObject(forkliftLabelDiv);
-                forkliftLabel.position.set(15, 3, 15);
-                scene.add(forkliftLabel);
-            }
-
-            function addDimensions() {
-                const halfWidth = 50 / 2;
-                const halfDepth = 50 / 2;
-                const topY = 0.01;
-                const offset = 5;
-                const dimLineMaterial = new THREE.LineBasicMaterial({ color: 0x333333 });
-                const tickSize = 1.5;
-
-                const zDimPoints = [
-                    new THREE.Vector3(halfWidth + offset, topY, -halfDepth), new THREE.Vector3(halfWidth + offset, topY, halfDepth),
-                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, -halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, -halfDepth),
-                    new THREE.Vector3(halfWidth + offset - tickSize / 2, topY, halfDepth), new THREE.Vector3(halfWidth + offset + tickSize / 2, topY, halfDepth)
-                ];
-                const zDimGeometry = new THREE.BufferGeometry().setFromPoints(zDimPoints);
-                scene.add(new THREE.LineSegments(zDimGeometry, dimLineMaterial));
-
-                const zLabelDiv = document.createElement('div');
-                zLabelDiv.className = 'dimension-label';
-                zLabelDiv.textContent = '50.0 m';
-                const zDimLabel = new THREE.CSS2DObject(zLabelDiv);
-                zDimLabel.position.set(halfWidth + offset + 1, topY, 0);
-                scene.add(zDimLabel);
-
-                const xDimPoints = [
-                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset), new THREE.Vector3(halfWidth, topY, halfDepth + offset),
-                    new THREE.Vector3(-halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(-halfWidth, topY, halfDepth + offset + tickSize / 2),
-                    new THREE.Vector3(halfWidth, topY, halfDepth + offset - tickSize / 2), new THREE.Vector3(halfWidth, topY, halfDepth + offset + tickSize / 2)
-                ];
-                const xDimGeometry = new THREE.BufferGeometry().setFromPoints(xDimPoints);
-                scene.add(new THREE.LineSegments(xDimGeometry, dimLineMaterial));
-
-                const xLabelDiv = document.createElement('div');
-                xLabelDiv.className = 'dimension-label';
-                xLabelDiv.textContent = '50.0 m';
-                const xDimLabel = new THREE.CSS2DObject(xLabelDiv);
-                xDimLabel.position.set(0, topY, halfDepth + offset + 1);
-                scene.add(xDimLabel);
-            }
+            // --- REMOVED: addReinforcementVisuals() ---
+            // --- REMOVED: addLoadVisuals() ---
+            // --- REMOVED: addDimensions() ---
+            // (All logic moved into the new buildModel() function)
 
             function onWindowResize() {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -1415,11 +1510,6 @@ Format the output using Markdown code blocks for each drawing for clear presenta
     </script>
 </body>
 </html>
-
-
-
-
-
 
 
 
