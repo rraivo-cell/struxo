@@ -1332,9 +1332,30 @@ ${currentSpecList}
                         
                         try {
                             const userQuery = userQueryFn(); // Get dynamic specs
-                            const result = await callGemini(userQuery, systemPrompt);
+                            
+                            // --- FIX: Wrap userQuery in a valid 'contents' array ---
+                            const historyForCall = [
+                                { "role": "user", "parts": [{ "text": userQuery }] }
+                            ];
+                            
+                            // --- FIX: Pass the array to callGemini, and no tools ---
+                            const response = await callGemini(historyForCall, systemPrompt, null);
+                            
+                            // --- FIX: Extract text from the response object ---
+                            let resultText = "";
+                            if (response.candidates && response.candidates[0].content && response.candidates[0].content.parts[0].text) {
+                                resultText = response.candidates[0].content.parts[0].text;
+                            } else {
+                                // Check for blocked response
+                                if (response.promptFeedback) {
+                                    console.warn("Gemini call blocked:", response.promptFeedback);
+                                    throw new Error(`Request was blocked. Reason: ${response.promptFeedback.blockReason}`);
+                                }
+                                throw new Error("No valid text response from Gemini.");
+                            }
+                            
                             // Basic markdown cleanup. Replace ```markdown and ```
-                            let formattedResult = result.replace(/```markdown\n/g, '').replace(/```/g, '');
+                            let formattedResult = resultText.replace(/```markdown\n/g, '').replace(/```/g, '');
                             
                             // Simple table formatting
                             formattedResult = formattedResult
@@ -1510,6 +1531,7 @@ Format the output using Markdown code blocks for each drawing for clear presenta
     </script>
 </body>
 </html>
+
 
 
 
